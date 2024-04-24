@@ -9,7 +9,7 @@ project ("OSGPlayground")
 
 find_package(OpenSceneGraph REQUIRED COMPONENTS osg osgDB osgGA osgUtil osgViewer)
 
-include_directories("out/build/x64-debug/vcpkg_installed/x64-windows/include")
+include_directories(${OPENSCENEGRAPH_INCLUDE_DIRS})
 
 add_executable(Output4KImg output4kimg.cpp)
 
