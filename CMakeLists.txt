@@ -11,16 +11,84 @@ find_package(OpenSceneGraph REQUIRED COMPONENTS osg osgDB osgGA osgUtil osgViewe
 
 include_directories(${OPENSCENEGRAPH_INCLUDE_DIRS})
 
-add_executable(output4KImg output4kimg.cpp )
-add_executable(fixed_star "fixed_star/fixed_star.cpp")
-add_executable(render_to_tex "render_to_tex/to_smaller_tex.cpp")
-add_executable(rendering_relative_to_eye_artifact "rendering_relative_to_eye/artifact.cpp")
-add_executable(rendering_relative_to_eye "rendering_relative_to_eye/solution.cpp")
+set(DEMOS
+    fixed_star
+    render_to_tex
+    rendering_relative_to_eye
+    rgba_lightness
+    satellite
+)
 
-target_link_libraries(output4KImg PRIVATE ${OPENSCENEGRAPH_LIBRARIES})
-target_link_libraries(fixed_star PRIVATE ${OPENSCENEGRAPH_LIBRARIES})
-target_link_libraries(render_to_tex PRIVATE ${OPENSCENEGRAPH_LIBRARIES})
-target_link_libraries(rendering_relative_to_eye_artifact PRIVATE ${OPENSCENEGRAPH_LIBRARIES})
-target_link_libraries(rendering_relative_to_eye PRIVATE ${OPENSCENEGRAPH_LIBRARIES})
+set(LIBS ${OPENSCENEGRAPH_LIBRARIES})
+
+
+function(create_project_from_sources chapter demo)
+	file(GLOB SOURCE
+            "src/${chapter}/${demo}/*.h"
+            "src/${chapter}/${demo}/*.cpp"
+            "src/${chapter}/${demo}/*.vs"
+            "src/${chapter}/${demo}/*.fs"
+            "src/${chapter}/${demo}/*.tcs"
+            "src/${chapter}/${demo}/*.tes"
+            "src/${chapter}/${demo}/*.gs"
+            "src/${chapter}/${demo}/*.cs"
+    )
+	if (demo STREQUAL "")
+		SET(replaced "")
+		string(REPLACE "/" "_" replaced ${chapter})
+		set(NAME ${replaced})
+	else()
+		set(NAME "${chapter}__${demo}")
+	endif()
+    add_executable(${NAME} ${SOURCE})
+    target_link_libraries(${NAME} ${LIBS})
+    if(MSVC)
+		target_compile_options(${NAME} PRIVATE /std:c++17 /MP)
+        target_link_options(${NAME} PUBLIC /ignore:4099)
+    endif(MSVC)
+    if(WIN32)
+        set_target_properties(${NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${chapter}")
+        set_target_properties(${NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${chapter}/Debug")
+    elseif(UNIX AND NOT APPLE)
+        set_target_properties(${NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${chapter}")
+    elseif(APPLE)
+        set_target_properties(${NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${chapter}")
+        set_target_properties(${NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/bin/${chapter}")
+        set_target_properties(${NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/bin/${chapter}")
+    endif(WIN32)
+    # copy shader files to build directory
+    file(GLOB SHADERS
+             "src/${chapter}/${demo}/*.vs"
+             # "src/${chapter}/${demo}/*.frag"
+             "src/${chapter}/${demo}/*.fs"
+             "src/${chapter}/${demo}/*.tcs"
+             "src/${chapter}/${demo}/*.tes"
+             "src/${chapter}/${demo}/*.gs"
+             "src/${chapter}/${demo}/*.cs"
+    )
+	# copy dlls
+	file(GLOB DLLS "dlls/*.dll")
+    foreach(SHADER ${SHADERS})
+        if(WIN32)
+            # configure_file(${SHADER} "test")
+            add_custom_command(TARGET ${NAME} PRE_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${SHADER} $<TARGET_FILE_DIR:${NAME}>)
+			add_custom_command(TARGET ${NAME} PRE_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${DLLS} $<TARGET_FILE_DIR:${NAME}>)
+        elseif(UNIX AND NOT APPLE)
+            file(COPY ${SHADER} DESTINATION ${CMAKE_SOURCE_DIR}/bin/${chapter})
+        elseif(APPLE)
+            # create symbolic link for *.vs *.fs *.gs
+            get_filename_component(SHADERNAME ${SHADER} NAME)
+            makeLink(${SHADER} ${CMAKE_SOURCE_DIR}/bin/${chapter}/${SHADERNAME} ${NAME})
+        endif(WIN32)
+    endforeach(SHADER)
+    # if compiling for visual studio, also use configure file for each project (specifically to set up working directory)
+    if(MSVC)
+        configure_file(${CMAKE_SOURCE_DIR}/configuration/visualstudio.vcxproj.user.in ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.vcxproj.user @ONLY)
+    endif(MSVC)
+endfunction()
+
+foreach(DEMO ${DEMOS})
+	create_project_from_sources(${DEMO} "")
+endforeach(DEMOS)
 
 # TODO: Add tests and install targets if needed.
